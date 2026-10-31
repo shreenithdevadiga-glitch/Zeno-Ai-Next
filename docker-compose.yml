@@ -1,0 +1,123 @@
+version: '3.8'
+
+services:
+  # ============================================================
+  # ZENO AI NEXT - Stateless API Server
+  # ============================================================
+  zeno-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zeno-ai-next:2.0.0
+    container_name: zeno-api-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgres://zeno:zenopass@postgres:5432/zeno_production
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:-zeno_production_jwt_secret_change_me_before_deploy}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - POLLINATIONS_API_KEY=${POLLINATIONS_API_KEY}
+      - S3_BUCKET=${S3_BUCKET:-zeno-production-storage}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+    volumes:
+      - zeno-uploads:/app/uploads
+      - zeno-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - zeno-network
+
+  # ============================================================
+  # ZENO AI NEXT - Dedicated BullMQ Background Worker
+  # ============================================================
+  zeno-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zeno-ai-next:2.0.0
+    container_name: zeno-worker-node
+    restart: unless-stopped
+    command: ["node", "server/workers/jobWorker.js"]
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgres://zeno:zenopass@postgres:5432/zeno_production
+      - REDIS_URL=redis://redis:6379
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+    volumes:
+      - zeno-uploads:/app/uploads
+      - zeno-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - zeno-network
+
+  # ============================================================
+  # PostgreSQL with pgvector extension
+  # ============================================================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: zeno-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: zeno
+      POSTGRES_PASSWORD: zenopass
+      POSTGRES_DB: zeno_production
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zeno -d zeno_production"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - zeno-network
+
+  # ============================================================
+  # Redis 7 In-Memory Cache and Distributed Queue Broker
+  # ============================================================
+  redis:
+    image: redis:7-alpine
+    container_name: zeno-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - zeno-network
+
+volumes:
+  postgres-data:
+  redis-data:
+  zeno-uploads:
+  zeno-data:
+
+networks:
+  zeno-network:
+    driver: bridge

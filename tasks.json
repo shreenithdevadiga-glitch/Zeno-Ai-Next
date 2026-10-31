@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start ZENO AI (Full-Stack)",
+      "type": "npm",
+      "script": "start",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "Start Frontend Dev (Vite)",
+      "type": "npm",
+      "script": "dev:client",
+      "problemMatcher": []
+    }
+  ]
+}
